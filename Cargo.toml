@@ -1,0 +1,19 @@
+[package]
+name = "stardust"
+version = "0.0.1"
+authors = ["Dario Ostuni <dario.ostuni@gmail.com>"]
+license = "Apache-2.0"
+
+[dependencies]
+toml = "0.2"
+tiny-keccak = "1.1"
+lz4-compress = "0.1"
+byteorder = "0.5"
+
+[[bin]]
+name = "stardust"
+path = "src/client.rs"
+
+[[bin]]
+name = "stardustd"
+path = "src/server.rs"
