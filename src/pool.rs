@@ -1,5 +1,6 @@
 extern crate byteorder;
 extern crate tiny_keccak;
+extern crate lz4_compress as lz4;
 
 use disk_file::{CHUNK_SIZE, HASH_SIZE};
 use disk_file::DiskFile;
@@ -12,6 +13,8 @@ use std::path::PathBuf;
 const MAGIC_NUMBER: u32 = 1400136018;
 const PROTOCOL_VERSION: u16 = 0;
 const ACTION_SEND_DESCRIPTION: u8 = 0;
+const ACTION_SEND_DATA: u8 = 1;
+const ACTION_SEND_CHUNK_REQUEST: u8 = 2;
 
 pub struct Pool
 {
@@ -35,6 +38,15 @@ pub struct FileDescription
     pub last_chunk_size: u16,
 }
 
+// Proxy functions:
+// get_binary_data
+// generate_binary_description
+// process_binary_data
+// process_binary_description
+// get_binary_chunk_request TODO
+// process_binary_chunk_request TODO
+// get_binary_send_packet TODO
+
 impl Pool
 {
     pub fn new(files: &Vec<PathBuf>, first_packet: Option<Vec<u8>>) -> Pool
@@ -52,7 +64,7 @@ impl Pool
         };
         if have_sizes
         {
-            p.update_tables(&first_packet.unwrap());
+            p.process_binary_description(&first_packet.unwrap());
         }
         {
             let sizes = &p.cache_set_sizes;
@@ -178,7 +190,7 @@ impl Pool
         return (file_id, name_hash, file_hash, num_chunks, last_chunk_size);
     }
 
-    pub fn update_tables(&mut self, data: &Vec<u8>) -> bool
+    pub fn process_binary_description(&mut self, data: &Vec<u8>) -> bool
     {
         if self.read_only
         {
@@ -257,31 +269,53 @@ impl Pool
             let chunk_id: u32 = BigEndian::read_u32(&local_slice[(HASH_SIZE + 1)..(HASH_SIZE + 5)]);
             if self.update_left.contains(&(fid, chunk_id))
             {
-                if !self.map_hash_write.contains_key(&chunk_hash)
+                let mapped_fid: usize = self.file_index_map.get(&fid).unwrap().clone();
+                if self.data[mapped_fid].get_chunk_hash(chunk_id as usize) != chunk_hash
                 {
-                    let mut chunk_hash2: [u8; HASH_SIZE] = [0; HASH_SIZE];
-                    chunk_hash2.clone_from_slice(&chunk_hash);
-                    self.map_hash_write.insert(chunk_hash2, Vec::new());
+                    if !self.map_hash_write.contains_key(&chunk_hash)
+                    {
+                        let mut chunk_hash2: [u8; HASH_SIZE] = [0; HASH_SIZE];
+                        chunk_hash2.clone_from_slice(&chunk_hash);
+                        self.map_hash_write.insert(chunk_hash2, Vec::new());
+                    }
+                    self.map_hash_write.get_mut(&chunk_hash).unwrap().push((fid, chunk_id));
                 }
-                self.map_hash_write.get_mut(&chunk_hash).unwrap().push((fid, chunk_id));
                 self.update_left.remove(&(fid, chunk_id));
             }
         }
         return self.update_left.is_empty();
     }
 
-    pub fn process_chunk(&mut self, chunk_hash: [u8; HASH_SIZE], chunk: &Vec<u8>)
+    pub fn process_binary_data(&mut self, chunk: &Vec<u8>)
+    {
+        let mut chunk_hash: [u8; HASH_SIZE] = [0; HASH_SIZE];
+        chunk_hash.clone_from_slice(&chunk[0..HASH_SIZE]);
+        let mut uncompressed_chunk: Vec<u8> = Vec::new();
+        uncompressed_chunk.extend_from_slice(&lz4::decompress(&chunk[HASH_SIZE..chunk.len()]).unwrap().as_slice());
+        let mut hash_checker = Keccak::new_sha3_256();
+        hash_checker.update(uncompressed_chunk.as_slice());
+        let mut hash_result: [u8; HASH_SIZE] = [0; HASH_SIZE];
+        hash_checker.finalize(&mut hash_result);
+        if hash_result != chunk_hash
+        {
+            println!("WARNING!!! Received garbage data, discarding");
+            return;
+        }
+        self.process_chunk(&chunk_hash, &uncompressed_chunk);
+    }
+
+    pub fn process_chunk(&mut self, chunk_hash: &[u8; HASH_SIZE], chunk: &Vec<u8>)
     {
         if self.read_only
         {
             panic!("Writing on read-only files!");
         }
-        if !self.map_hash_write.contains_key(&chunk_hash)
+        if !self.map_hash_write.contains_key(chunk_hash)
         {
             return;
         }
         {
-            let vec_mapped = self.map_hash_write.get(&chunk_hash).unwrap();
+            let vec_mapped = self.map_hash_write.get(chunk_hash).unwrap();
             for i in vec_mapped
             {
                 let &(unmapped_fid, chunk_id) = i;
@@ -293,17 +327,45 @@ impl Pool
                 self.data[mapped_fid].write_chunk(chunk_id as usize, chunk);
             }
         }
-        self.map_hash_write.remove(&chunk_hash);
-
+        self.map_hash_write.remove(chunk_hash);
     }
 
-    pub fn get_chunk(&mut self, chunk_hash: [u8; HASH_SIZE]) -> Option<Vec<u8>>
+    pub fn get_binary_data(&mut self, chunk_hash: &[u8; HASH_SIZE]) -> Option<Vec<u8>>
     {
-        if !self.map_hash_read.contains_key(&chunk_hash)
+        let chunk_wrap = self.get_chunk(chunk_hash);
+        if chunk_wrap.is_none()
         {
             return None;
         }
-        let &(i, j) = self.map_hash_read.get(&chunk_hash).unwrap();
+        let chunk = chunk_wrap.unwrap();
+        let mut v: Vec<u8> = Vec::new();
+        let mut buffer: [u8; 128] = [0; 128];
+        // Magic number
+        BigEndian::write_u32(&mut buffer[0..4], MAGIC_NUMBER);
+        v.extend_from_slice(&buffer[0..4]);
+        // Protocol version
+        BigEndian::write_u16(&mut buffer[0..2], PROTOCOL_VERSION);
+        v.extend_from_slice(&buffer[0..2]);
+        // Action
+        v.push(ACTION_SEND_DATA);
+        // Chunk hash
+        v.extend_from_slice(chunk_hash);
+        // Data
+        v.extend_from_slice(&lz4::compress(&chunk).as_slice());
+        if v.len() > 65000
+        {
+            panic!("Compression is doing some damage!");
+        }
+        return Some(v);
+    }
+
+    pub fn get_chunk(&mut self, chunk_hash: &[u8; HASH_SIZE]) -> Option<Vec<u8>>
+    {
+        if !self.map_hash_read.contains_key(chunk_hash)
+        {
+            return None;
+        }
+        let &(i, j) = self.map_hash_read.get(chunk_hash).unwrap();
         return Some(self.data[i as usize].read_chunk(j as usize));
     }
 }
