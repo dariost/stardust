@@ -14,7 +14,8 @@ const MAGIC_NUMBER: u32 = 1400136018;
 const PROTOCOL_VERSION: u16 = 0;
 const ACTION_SEND_DESCRIPTION: u8 = 0;
 const ACTION_SEND_DATA: u8 = 1;
-const ACTION_SEND_CHUNK_REQUEST: u8 = 2;
+const ACTION_REQUEST_DATA: u8 = 2;
+const ACTION_REQUEST_DESCRIPTION: u8 = 3;
 
 pub struct Pool
 {
@@ -43,7 +44,7 @@ pub struct FileDescription
 // generate_binary_description
 // process_binary_data
 // process_binary_description
-// get_binary_chunk_request TODO
+// get_binary_chunk_request
 // process_binary_chunk_request TODO
 // get_binary_send_packet TODO
 
@@ -109,6 +110,29 @@ impl Pool
             }
         }
         return p;
+    }
+
+    pub fn get_binary_chunk_request(&self) -> Vec<u8>
+    {
+        let mut v: Vec<u8> = Vec::new();
+        let mut buffer: [u8; 128] = [0; 128];
+        // Magic number
+        BigEndian::write_u32(&mut buffer[0..4], MAGIC_NUMBER);
+        v.extend_from_slice(&buffer[0..4]);
+        // Protocol version
+        BigEndian::write_u16(&mut buffer[0..2], PROTOCOL_VERSION);
+        v.extend_from_slice(&buffer[0..2]);
+        // Action
+        v.push(ACTION_REQUEST_DATA);
+        for i in self.map_hash_write.keys()
+        {
+            if v.len() > 60000
+            {
+                break;
+            }
+            v.extend_from_slice(i);
+        }
+        return v;
     }
 
     fn get_description(&self) -> Vec<FileDescription>
