@@ -137,6 +137,11 @@ impl Pool
         return p;
     }
 
+    pub fn desc_left(&self) -> usize
+    {
+        return self.update_left.len();
+    }
+
     pub fn get_binary_chunk_request(&self) -> Vec<u8>
     {
         let mut v: Vec<u8> = Vec::new();
@@ -329,7 +334,6 @@ impl Pool
         if self.file_index_map.len() == 0
         {
             let num_files: usize = data[0] as usize;
-            println!("{}", num_files);
             for i in 0..num_files
             {
                 let (file_id, name_hash, _, _, _) = self.unwrap_description(data, i);
@@ -340,7 +344,6 @@ impl Pool
                         self.file_index_map.insert(file_id, j);
                         for k in 0..self.data[j].get_num_chunks()
                         {
-                            println!("Inserting ({}, {})", file_id, k);
                             self.update_left.insert((file_id, k as u32));
                         }
                         break;
