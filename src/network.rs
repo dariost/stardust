@@ -10,7 +10,7 @@ use std::net::SocketAddr;
 use std::net::UdpSocket;
 use std::path::PathBuf;
 use std::thread::sleep;
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, Instant};
 
 pub struct Network
 {
@@ -39,8 +39,8 @@ impl Network
             let mut finished = false;
             'outer: while !finished
             {
-                let mut started = SystemTime::now();
-                while started.elapsed().unwrap() < Duration::from_millis(2500)
+                let mut started = Instant::now();
+                while started.elapsed() < Duration::from_millis(2500)
                 {
                     let mut buffer: [u8; 1 << 16] = [0; 1 << 16];
                     let buffer_size = match self.socket.recv_from(&mut buffer)
@@ -69,7 +69,7 @@ impl Network
                     {
                         break 'outer;
                     }
-                    started = SystemTime::now();
+                    started = Instant::now();
                     println!("Asking for files description: {} left", self.pool.desc_left());
                 }
                 let mut send_request: Vec<u8> = Vec::new();
@@ -89,7 +89,7 @@ impl Network
                 };
             }
         }
-        let mut last_print = SystemTime::now();
+        let mut last_print = Instant::now();
         while self.client
         {
             if self.pool.is_complete()
@@ -101,9 +101,9 @@ impl Network
             let mut count = 0;
             loop
             {
-                if last_print.elapsed().unwrap().as_secs() > 1
+                if last_print.elapsed().as_secs() > 1
                 {
-                    last_print = SystemTime::now();
+                    last_print = Instant::now();
                     println!("~{} kibibytes left", self.pool.chunks_left() * 60000 / 1024);
                 }
                 if count > 40000 / HASH_SIZE
@@ -145,12 +145,12 @@ impl Network
             let send_req = self.pool.get_binary_chunk_request();
             let _ = self.socket.send_to(send_req.as_slice(), &self.send_address);
         }
-        let mut send_started = SystemTime::now();
+        let mut send_started = Instant::now();
         while !self.client
         {
-            if last_print.elapsed().unwrap().as_secs() > 1
+            if last_print.elapsed().as_secs() > 1
             {
-                last_print = SystemTime::now();
+                last_print = Instant::now();
                 println!("Queue length: {}", self.pool.get_queue_size());
             }
             let packet = self.pool.get_binary_send_packet();
@@ -189,9 +189,9 @@ impl Network
                 v.extend_from_slice(&buffer[7..buffer_size]);
                 self.pool.process_binary_chunk_request(&v);
             }
-            if buffer[6] == ACTION_REQUEST_DESCRIPTION || send_started.elapsed().unwrap().as_secs() >= 10
+            if buffer[6] == ACTION_REQUEST_DESCRIPTION || send_started.elapsed().as_secs() >= 10
             {
-                send_started = SystemTime::now();
+                send_started = Instant::now();
                 let b = self.pool.generate_binary_description();
                 for bv in &b
                 {

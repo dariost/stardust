@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::path::PathBuf;
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, Instant};
 
 pub const MAGIC_NUMBER: u32 = 1400136018;
 pub const PROTOCOL_VERSION: u16 = 0;
@@ -29,7 +29,7 @@ pub struct Pool
     map_hash_read: HashMap<[u8; HASH_SIZE], (u8, u32)>,
     cache_set_sizes: Vec<u64>,
     cache_file_path: Vec<PathBuf>,
-    save_old_chunks_time: HashMap<[u8; HASH_SIZE], SystemTime>,
+    save_old_chunks_time: HashMap<[u8; HASH_SIZE], Instant>,
     server_send_queue: VecDeque<[u8; HASH_SIZE]>,
     server_in_queue: HashSet<[u8; HASH_SIZE]>,
 }
@@ -63,7 +63,7 @@ impl Pool
         }
         let chunk_hash = self.server_send_queue.pop_front().unwrap();
         self.server_in_queue.remove(&chunk_hash);
-        let now = SystemTime::now();
+        let now = Instant::now();
         if self.save_old_chunks_time.contains_key(&chunk_hash)
         {
             self.save_old_chunks_time.remove(&chunk_hash);
@@ -172,7 +172,7 @@ impl Pool
             println!("WARNING!!! Corrupted chunk request");
             return;
         }
-        let now = SystemTime::now();
+        let now = Instant::now();
         for i in 0..(data.len() / HASH_SIZE)
         {
             let chunk = &data[(i * HASH_SIZE)..((i + 1) * HASH_SIZE)];
@@ -182,11 +182,7 @@ impl Pool
                 if self.save_old_chunks_time.contains_key(chunk)
                 {
                     let inserted_time = self.save_old_chunks_time.get(chunk).unwrap().clone();
-                    let elapsed_time = match now.duration_since(inserted_time)
-                    {
-                        Err(why) => panic!("Time is wrong! {}", why),
-                        Ok(n) => n,
-                    };
+                    let elapsed_time = now.duration_since(inserted_time);
                     if elapsed_time < Duration::from_millis(2500)
                     {
                         save_chunk = false;
