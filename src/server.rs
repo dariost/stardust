@@ -33,10 +33,16 @@ fn main()
         None => panic!("Cannot parse conf file"),
         Some(n) => n,
     };
-    let mut broadcast_address = String::from("255.255.255.255");
+    let mut broadcast_address: Vec<String> = vec![String::from("255.255.255.255"); 1];
     if table.contains_key("broadcast_address")
     {
-        broadcast_address = String::from(table.get("broadcast_address").unwrap().clone().as_str().unwrap());
+        broadcast_address.clear();
+        let mut bat: Vec<toml::Value> = Vec::new();
+        bat.extend_from_slice(table.get("broadcast_address").unwrap().as_slice().unwrap());
+        for i in &bat
+        {
+            broadcast_address.push(String::from(i.as_str().unwrap()));
+        }
     }
     let mut file_folder = String::from("./");
     if table.contains_key("file_folder")
@@ -48,22 +54,26 @@ fn main()
     {
         megabit_per_second = table.get("megabit_per_second").unwrap().clone().as_float().unwrap();
     }
-    let mut ip: Vec<u8> = Vec::new();
-    for s in broadcast_address.split(".")
+    let mut to_send: Vec<SocketAddr> = Vec::new();
+    for i in &broadcast_address
     {
-        ip.push(match s.parse::<u8>()
-            {
-                Err(why) => panic!("Invalid IP address: {}", why),
-                Ok(n) => n,
-            });
+        let mut ip: Vec<u8> = Vec::new();
+        for s in i.split(".")
+        {
+            ip.push(match s.parse::<u8>()
+                {
+                    Err(why) => panic!("Invalid IP address: {}", why),
+                    Ok(n) => n,
+                });
+        }
+        to_send.push(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(ip[0], ip[1], ip[2], ip[3])), 31415));
     }
-    let to_send = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(ip[0], ip[1], ip[2], ip[3])), 31415);
     let mut files_path: Vec<PathBuf> = Vec::new();
     let paths = fs::read_dir(file_folder).unwrap();
     for path in paths
     {
         files_path.push(path.unwrap().path());
     }
-    let mut net = Network::new(&files_path, false, &to_send, megabit_per_second);
+    let mut net = Network::new(&files_path, false, to_send, megabit_per_second);
     net.run();
 }

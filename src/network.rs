@@ -16,7 +16,7 @@ pub struct Network
 {
     socket: UdpSocket,
     client: bool,
-    send_address: SocketAddr,
+    send_address: Vec<SocketAddr>,
     pool: Pool,
     megabit_per_second: f64,
 }
@@ -82,7 +82,7 @@ impl Network
                 send_request.extend_from_slice(&buffer[0..2]);
                 // Action
                 send_request.push(ACTION_REQUEST_DESCRIPTION);
-                let _ = match self.socket.send_to(send_request.as_slice(), &self.send_address)
+                let _ = match self.socket.send_to(send_request.as_slice(), &self.send_address[0])
                 {
                     Err(why) => panic!("Cannot send request for description: {}", why),
                     Ok(n) => n,
@@ -143,7 +143,7 @@ impl Network
                 }
             }
             let send_req = self.pool.get_binary_chunk_request();
-            let _ = self.socket.send_to(send_req.as_slice(), &self.send_address);
+            let _ = self.socket.send_to(send_req.as_slice(), &self.send_address[0]);
         }
         let mut send_started = Instant::now();
         while !self.client
@@ -161,7 +161,10 @@ impl Network
             else
             {
                 let unwrapped_packet = packet.unwrap();
-                let _ = self.socket.send_to(unwrapped_packet.as_slice(), &self.send_address);
+                for addr in &self.send_address
+                {
+                    let _ = self.socket.send_to(unwrapped_packet.as_slice(), addr);
+                }
                 let converted_size: f64 = (unwrapped_packet.len() as f64) * 8.0 / 1000000.0;
                 let milli_stop: u64 = (converted_size * 1000.0 / self.megabit_per_second) as u64;
                 let _ = self.socket.set_nonblocking(true);
@@ -195,15 +198,23 @@ impl Network
                 let b = self.pool.generate_binary_description();
                 for bv in &b
                 {
-                    let _ = self.socket.send_to(bv.as_slice(), &self.send_address);
+                    for addr in &self.send_address
+                    {
+                        let _ = self.socket.send_to(bv.as_slice(), addr);
+                    }
                     sleep(max(Duration::from_millis((480.0 / self.megabit_per_second) as u64), Duration::from_millis(1)));
                 }
             }
         }
     }
 
-    pub fn new(files: &Vec<PathBuf>, _client: bool, _send_address: &SocketAddr, _megabit_per_second: f64) -> Network
+    pub fn new(files: &Vec<PathBuf>, _client: bool, _send_address: Vec<SocketAddr>, _megabit_per_second: f64) -> Network
     {
+        println!("Welcome to Stardust");
+        if _send_address.len() != 1
+        {
+            panic!("Cannot have multiple server addresses");
+        }
         let sock = match if _client
         {
             UdpSocket::bind("0.0.0.0:31415")
@@ -218,6 +229,7 @@ impl Network
         };
         if _client
         {
+            println!("Waiting for bootstrap packet");
             let mut bootstrap_packet: [u8; 1 << 16] = [0; 1 << 16];
             let mut bootstrap_packet_size: usize;
             let mut send_request: Vec<u8> = Vec::new();
@@ -230,14 +242,15 @@ impl Network
             send_request.extend_from_slice(&buffer[0..2]);
             // Action
             send_request.push(ACTION_REQUEST_DESCRIPTION);
-            let _ = match sock.set_read_timeout(Some(Duration::from_millis(20)))
+            let _ = match sock.set_read_timeout(Some(Duration::from_millis(1500)))
             {
                 Err(why) => panic!("Cannot set read timeout: {}", why),
                 Ok(_) => 0,
             };
             loop
             {
-                let _ = match sock.send_to(send_request.as_slice(), &_send_address)
+                println!("Requesting bootstrap...");
+                let _ = match sock.send_to(send_request.as_slice(), &_send_address[0])
                 {
                     Err(why) => panic!("Cannot send request for description: {}", why),
                     Ok(n) => n,
@@ -264,14 +277,20 @@ impl Network
                 {
                     continue;
                 }
+                println!("Bootstrapping started...");
                 break;
             }
+            let _ = match sock.set_read_timeout(Some(Duration::from_millis(20)))
+            {
+                Err(why) => panic!("Cannot set read timeout: {}", why),
+                Ok(_) => 0,
+            };
             let mut vec_boostrap = Vec::new();
             vec_boostrap.extend_from_slice(&bootstrap_packet[7..bootstrap_packet_size]);
             return Network {
                 socket: sock,
                 client: true,
-                send_address: _send_address.clone(),
+                send_address: _send_address,
                 pool: Pool::new(files, Some(vec_boostrap)),
                 megabit_per_second: _megabit_per_second,
             };
@@ -286,7 +305,7 @@ impl Network
             return Network {
                 socket: sock,
                 client: false,
-                send_address: _send_address.clone(),
+                send_address: _send_address,
                 pool: Pool::new(files, None),
                 megabit_per_second: _megabit_per_second,
             };

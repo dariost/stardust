@@ -36,6 +36,6 @@ fn main()
     {
         files_path.push(PathBuf::from(&args[i]));
     }
-    let mut net = Network::new(&files_path, true, &to_send, 0.0);
+    let mut net = Network::new(&files_path, true, vec![to_send; 1], 0.0);
     net.run();
 }
