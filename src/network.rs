@@ -220,7 +220,7 @@ impl Network
             send_request.extend_from_slice(&buffer[0..2]);
             // Action
             send_request.push(ACTION_REQUEST_DESCRIPTION);
-            let _ = match sock.set_read_timeout(Some(Duration::from_millis(1500)))
+            let _ = match sock.set_read_timeout(Some(Duration::from_millis(20)))
             {
                 Err(why) => panic!("Cannot set read timeout: {}", why),
                 Ok(_) => 0,
