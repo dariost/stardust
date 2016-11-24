@@ -33,7 +33,7 @@ impl Network
     {
         if self.client
         {
-            let mut finished = self.pool.process_binary_description(&vec![0u8; 1]);
+            let mut finished = false;
             'outer: while !finished
             {
                 let mut started = SystemTime::now();
@@ -47,6 +47,7 @@ impl Network
                     };
                     if buffer_size < 7
                     {
+                        println!("Timeout");
                         continue;
                     }
                     let mut head: [u8; 6] = [0; 6];
@@ -68,14 +69,34 @@ impl Network
                     }
                     started = SystemTime::now();
                 }
+                let mut send_request: Vec<u8> = Vec::new();
+                let mut buffer: [u8; 128] = [0; 128];
+                // Magic number
+                BigEndian::write_u32(&mut buffer[0..4], MAGIC_NUMBER);
+                send_request.extend_from_slice(&buffer[0..4]);
+                // Protocol version
+                BigEndian::write_u16(&mut buffer[0..2], PROTOCOL_VERSION);
+                send_request.extend_from_slice(&buffer[0..2]);
+                // Action
+                send_request.push(ACTION_REQUEST_DESCRIPTION);
+                let _ = match self.socket.send_to(send_request.as_slice(), &self.send_address)
+                {
+                    Err(why) => panic!("Cannot send request for description: {}", why),
+                    Ok(n) => n,
+                };
             }
         }
         while self.client
         {
+            if self.pool.is_complete()
+            {
+                return;
+            }
             let mut buffer: [u8; 1 << 16] = [0; 1 << 16];
             let mut buffer_size;
             loop
             {
+                println!("{} packets left", self.pool.chunks_left());
                 // TODO: if someone flood us with garbage this cycle never ends
                 buffer_size = match self.socket.recv_from(&mut buffer)
                 {
@@ -108,22 +129,24 @@ impl Network
                 }
             }
             let send_req = self.pool.get_binary_chunk_request();
-            let _ = self.socket.send_to(send_req.as_slice(), self.send_address);
+            let _ = self.socket.send_to(send_req.as_slice(), &self.send_address);
         }
         while !self.client
         {
+            println!("Queue length: {}", self.pool.get_queue_size());
             let packet = self.pool.get_binary_send_packet();
             if packet.is_none()
             {
-                let _ = self.socket.set_read_timeout(None);
+                let _ = self.socket.set_nonblocking(false);
             }
             else
             {
                 let unwrapped_packet = packet.unwrap();
-                let _ = self.socket.send_to(unwrapped_packet.as_slice(), self.send_address);
+                let _ = self.socket.send_to(unwrapped_packet.as_slice(), &self.send_address);
                 let converted_size: f64 = (unwrapped_packet.len() as f64) * 8.0 / 1000000.0;
-                let milli_stop: u64 = (converted_size / self.megabit_per_second) as u64 * 1000;
-                let _ = self.socket.set_read_timeout(Some(Duration::from_millis(milli_stop)));
+                let milli_stop: u64 = (converted_size * 1000.0 / self.megabit_per_second) as u64;
+                let _ = self.socket.set_nonblocking(true);
+                sleep(Duration::from_millis(milli_stop));
             }
             let mut buffer: [u8; 1 << 16] = [0; 1 << 16];
             let buffer_size = match self.socket.recv_from(&mut buffer)
@@ -152,8 +175,8 @@ impl Network
                 let b = self.pool.generate_binary_description();
                 for bv in &b
                 {
-                    let _ = self.socket.send_to(bv.as_slice(), self.send_address);
-                    sleep(Duration::from_millis((0.48 / self.megabit_per_second) as u64 * 1000));
+                    let _ = self.socket.send_to(bv.as_slice(), &self.send_address);
+                    sleep(Duration::from_millis((480.0 / self.megabit_per_second) as u64));
                 }
             }
         }
@@ -194,7 +217,7 @@ impl Network
             };
             loop
             {
-                let _ = match sock.send_to(send_request.as_slice(), _send_address)
+                let _ = match sock.send_to(send_request.as_slice(), &_send_address)
                 {
                     Err(why) => panic!("Cannot send request for description: {}", why),
                     Ok(n) => n,

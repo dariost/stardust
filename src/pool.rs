@@ -1,11 +1,11 @@
 extern crate byteorder;
-extern crate tiny_keccak;
 extern crate lz4_compress as lz4;
 
-use disk_file::{CHUNK_SIZE, HASH_SIZE};
+use commons::CHasher;
+use commons::HASH_SIZE;
+use disk_file::CHUNK_SIZE;
 use disk_file::DiskFile;
 use self::byteorder::{BigEndian, ByteOrder};
-use self::tiny_keccak::Keccak;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::collections::VecDeque;
@@ -96,7 +96,7 @@ impl Pool
             let sizes = &p.cache_set_sizes;
             if have_sizes && sizes.len() != files.len()
             {
-                panic!("Files and sizes mismatch!");
+                panic!("Files and sizes mismatch: {} - {}", sizes.len(), files.len());
             }
             if files.len() > 255
             {
@@ -279,6 +279,11 @@ impl Pool
         return (file_id, name_hash, file_hash, num_chunks, last_chunk_size);
     }
 
+    pub fn get_queue_size(&self) -> usize
+    {
+        return self.server_send_queue.len();
+    }
+
     pub fn process_binary_description(&mut self, data: &Vec<u8>) -> bool
     {
         if self.read_only
@@ -287,16 +292,16 @@ impl Pool
         }
         if self.cache_set_sizes.len() == 0
         {
-            self.cache_set_sizes = vec![0, self.cache_file_path.len() as u64];
+            self.cache_set_sizes = vec![0; self.cache_file_path.len()];
             let num_files: usize = data[0] as usize;
             for i in 0..num_files
             {
                 let (_, name_hash, _, num_chunks, mut last_chunk_size) = self.unwrap_description(data, i);
-                last_chunk_size = last_chunk_size % CHUNK_SIZE as u16;
-                let file_size = num_chunks as u64 * CHUNK_SIZE as u64 + last_chunk_size as u64;
+                last_chunk_size = last_chunk_size;
+                let file_size = (num_chunks - 1) as u64 * CHUNK_SIZE as u64 + last_chunk_size as u64;
                 for j in 0..self.cache_file_path.len()
                 {
-                    let mut name_sha3 = Keccak::new_sha3_256();
+                    let mut name_sha3 = CHasher::new();
                     let req_file_name = String::from(self.cache_file_path[j].file_name().unwrap().to_str().unwrap_or(""));
                     if req_file_name == ""
                     {
@@ -324,6 +329,7 @@ impl Pool
         if self.file_index_map.len() == 0
         {
             let num_files: usize = data[0] as usize;
+            println!("{}", num_files);
             for i in 0..num_files
             {
                 let (file_id, name_hash, _, _, _) = self.unwrap_description(data, i);
@@ -334,6 +340,7 @@ impl Pool
                         self.file_index_map.insert(file_id, j);
                         for k in 0..self.data[j].get_num_chunks()
                         {
+                            println!("Inserting ({}, {})", file_id, k);
                             self.update_left.insert((file_id, k as u32));
                         }
                         break;
@@ -381,7 +388,7 @@ impl Pool
         chunk_hash.clone_from_slice(&chunk[0..HASH_SIZE]);
         let mut uncompressed_chunk: Vec<u8> = Vec::new();
         uncompressed_chunk.extend_from_slice(&lz4::decompress(&chunk[HASH_SIZE..chunk.len()]).unwrap().as_slice());
-        let mut hash_checker = Keccak::new_sha3_256();
+        let mut hash_checker = CHasher::new();
         hash_checker.update(uncompressed_chunk.as_slice());
         let mut hash_result: [u8; HASH_SIZE] = [0; HASH_SIZE];
         hash_checker.finalize(&mut hash_result);
@@ -422,6 +429,11 @@ impl Pool
     pub fn is_complete(&self) -> bool
     {
         return self.map_hash_write.is_empty();
+    }
+
+    pub fn chunks_left(&self) -> usize
+    {
+        return self.map_hash_write.len();
     }
 
     pub fn get_binary_data(&mut self, chunk_hash: &[u8; HASH_SIZE]) -> Option<Vec<u8>>

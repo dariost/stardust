@@ -1,5 +1,6 @@
 extern crate toml;
 
+mod commons;
 mod disk_file;
 mod pool;
 mod network;
@@ -15,12 +16,11 @@ use toml::Parser;
 
 fn main()
 {
-    let mut conf_file = File::open("stardustd.toml")
-        .unwrap_or(match File::open("/etc/stardustd.toml")
-        {
-            Err(_) => panic!("Cannot open conf file"),
-            Ok(n) => n,
-        });
+    let mut conf_file = match File::open("stardustd.toml")
+    {
+        Err(why) => panic!("Cannot open conf file: {}", why),
+        Ok(n) => n,
+    };
     let mut conf_content = String::new();
     let _ = match conf_file.read_to_string(&mut conf_content)
     {
@@ -57,7 +57,7 @@ fn main()
                 Ok(n) => n,
             });
     }
-    let to_send = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(ip[0], ip[1], ip[2], ip[3])), 31416);
+    let to_send = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(ip[0], ip[1], ip[2], ip[3])), 31415);
     let mut files_path: Vec<PathBuf> = Vec::new();
     let paths = fs::read_dir(file_folder).unwrap();
     for path in paths

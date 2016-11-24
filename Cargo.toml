@@ -6,9 +6,9 @@ license = "Apache-2.0"
 
 [dependencies]
 toml = "0.2"
-tiny-keccak = "1.1"
 lz4-compress = "0.1"
 byteorder = "0.5"
+twox-hash = "1.0"
 
 [[bin]]
 name = "stardust"

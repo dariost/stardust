@@ -1,6 +1,5 @@
-extern crate tiny_keccak;
-
-use self::tiny_keccak::Keccak;
+use commons::CHasher;
+use commons::HASH_SIZE;
 use std::fs::File;
 use std::fs::OpenOptions;
 use std::io::BufReader;
@@ -11,7 +10,6 @@ use std::io::Write;
 use std::path::Path;
 
 pub const CHUNK_SIZE: usize = 60000;
-pub const HASH_SIZE: usize = 32;
 
 pub struct DiskFile
 {
@@ -48,7 +46,7 @@ impl DiskFile
         {
             panic!("Cannot get filename for {}", path.to_str().unwrap_or("NULL"));
         }
-        let mut name_sha3 = Keccak::new_sha3_256();
+        let mut name_sha3 = CHasher::new();
         name_sha3.update(diskfile.file_name.as_bytes());
         name_sha3.finalize(&mut diskfile.name_hash);
         if !diskfile.read_only
@@ -61,10 +59,10 @@ impl DiskFile
             Err(why) => panic!("Cannot open {}: {}", path.to_str().unwrap_or("NULL"), why),
             Ok(result) => result,
         });
-        let mut file_sha3 = Keccak::new_sha3_256();
+        let mut file_sha3 = CHasher::new();
         loop
         {
-            let mut chunk_sha3 = Keccak::new_sha3_256();
+            let mut chunk_sha3 = CHasher::new();
             let mut buffer: [u8; CHUNK_SIZE] = [0; CHUNK_SIZE];
             let mut buffer_index: usize = 0;
             loop
