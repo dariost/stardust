@@ -33,6 +33,7 @@ impl Network
 
     pub fn run(&mut self)
     {
+        println!("Program started!");
         if self.client
         {
             let mut finished = false;
@@ -88,6 +89,7 @@ impl Network
                 };
             }
         }
+        let mut last_print = SystemTime::now();
         while self.client
         {
             if self.pool.is_complete()
@@ -99,7 +101,11 @@ impl Network
             let mut count = 0;
             loop
             {
-                println!("~{} kibibytes left", self.pool.chunks_left() * 60000 / 1024);
+                if last_print.elapsed().unwrap().as_secs() > 1
+                {
+                    last_print = SystemTime::now();
+                    println!("~{} kibibytes left", self.pool.chunks_left() * 60000 / 1024);
+                }
                 if count > 40000 / HASH_SIZE
                 {
                     break;
@@ -142,7 +148,11 @@ impl Network
         let mut send_started = SystemTime::now();
         while !self.client
         {
-            println!("Queue length: {}", self.pool.get_queue_size());
+            if last_print.elapsed().unwrap().as_secs() > 1
+            {
+                last_print = SystemTime::now();
+                println!("Queue length: {}", self.pool.get_queue_size());
+            }
             let packet = self.pool.get_binary_send_packet();
             if packet.is_none()
             {
