@@ -211,7 +211,7 @@ impl Network
     pub fn new(files: &Vec<PathBuf>, _client: bool, _send_address: Vec<SocketAddr>, _megabit_per_second: f64) -> Network
     {
         println!("Welcome to Stardust");
-        if _send_address.len() != 1
+        if _client && _send_address.len() != 1
         {
             panic!("Cannot have multiple server addresses");
         }
