@@ -8,14 +8,16 @@ use self::byteorder::{BigEndian, ByteOrder};
 use self::tiny_keccak::Keccak;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::collections::VecDeque;
 use std::path::PathBuf;
+use std::time::{Duration, SystemTime};
 
-const MAGIC_NUMBER: u32 = 1400136018;
-const PROTOCOL_VERSION: u16 = 0;
-const ACTION_SEND_DESCRIPTION: u8 = 0;
-const ACTION_SEND_DATA: u8 = 1;
-const ACTION_REQUEST_DATA: u8 = 2;
-const ACTION_REQUEST_DESCRIPTION: u8 = 3;
+pub const MAGIC_NUMBER: u32 = 1400136018;
+pub const PROTOCOL_VERSION: u16 = 0;
+pub const ACTION_SEND_DESCRIPTION: u8 = 0;
+pub const ACTION_SEND_DATA: u8 = 1;
+pub const ACTION_REQUEST_DATA: u8 = 2;
+pub const ACTION_REQUEST_DESCRIPTION: u8 = 3;
 
 pub struct Pool
 {
@@ -27,6 +29,9 @@ pub struct Pool
     map_hash_read: HashMap<[u8; HASH_SIZE], (u8, u32)>,
     cache_set_sizes: Vec<u64>,
     cache_file_path: Vec<PathBuf>,
+    save_old_chunks_time: HashMap<[u8; HASH_SIZE], SystemTime>,
+    server_send_queue: VecDeque<[u8; HASH_SIZE]>,
+    server_in_queue: HashSet<[u8; HASH_SIZE]>,
 }
 
 pub struct FileDescription
@@ -40,16 +45,33 @@ pub struct FileDescription
 }
 
 // Proxy functions:
-// get_binary_data
+// get_binary_data NOPE
 // generate_binary_description
 // process_binary_data
 // process_binary_description
 // get_binary_chunk_request
-// process_binary_chunk_request TODO
-// get_binary_send_packet TODO
+// process_binary_chunk_request
+// get_binary_send_packet
 
 impl Pool
 {
+    pub fn get_binary_send_packet(&mut self) -> Option<Vec<u8>>
+    {
+        if self.server_send_queue.is_empty()
+        {
+            return None;
+        }
+        let chunk_hash = self.server_send_queue.pop_front().unwrap();
+        self.server_in_queue.remove(&chunk_hash);
+        let now = SystemTime::now();
+        if self.save_old_chunks_time.contains_key(&chunk_hash)
+        {
+            self.save_old_chunks_time.remove(&chunk_hash);
+        }
+        self.save_old_chunks_time.insert(chunk_hash.clone(), now);
+        return self.get_binary_data(&chunk_hash);
+    }
+
     pub fn new(files: &Vec<PathBuf>, first_packet: Option<Vec<u8>>) -> Pool
     {
         let have_sizes: bool = first_packet.is_some();
@@ -62,6 +84,9 @@ impl Pool
             map_hash_read: HashMap::new(),
             cache_set_sizes: Vec::new(),
             cache_file_path: files.clone(),
+            save_old_chunks_time: HashMap::new(),
+            server_send_queue: VecDeque::new(),
+            server_in_queue: HashSet::new(),
         };
         if have_sizes
         {
@@ -133,6 +158,46 @@ impl Pool
             v.extend_from_slice(i);
         }
         return v;
+    }
+
+    pub fn process_binary_chunk_request(&mut self, data: &Vec<u8>)
+    {
+        if data.len() % HASH_SIZE != 0
+        {
+            println!("WARNING!!! Corrupted chunk request");
+            return;
+        }
+        let now = SystemTime::now();
+        for i in 0..(data.len() / HASH_SIZE)
+        {
+            let chunk = &data[(i * HASH_SIZE)..((i + 1) * HASH_SIZE)];
+            if self.map_hash_read.contains_key(chunk) && !self.server_in_queue.contains(chunk)
+            {
+                let mut save_chunk = true;
+                if self.save_old_chunks_time.contains_key(chunk)
+                {
+                    let inserted_time = self.save_old_chunks_time.get(chunk).unwrap().clone();
+                    let elapsed_time = match now.duration_since(inserted_time)
+                    {
+                        Err(why) => panic!("Time is wrong! {}", why),
+                        Ok(n) => n,
+                    };
+                    if elapsed_time < Duration::from_millis(2500)
+                    {
+                        save_chunk = false;
+                    }
+                }
+                if save_chunk
+                {
+                    let mut chunk1: [u8; HASH_SIZE] = [0; HASH_SIZE];
+                    let mut chunk2: [u8; HASH_SIZE] = [0; HASH_SIZE];
+                    chunk1.clone_from_slice(chunk);
+                    chunk2.clone_from_slice(chunk);
+                    self.server_send_queue.push_back(chunk1);
+                    self.server_in_queue.insert(chunk2);
+                }
+            }
+        }
     }
 
     fn get_description(&self) -> Vec<FileDescription>
@@ -352,6 +417,11 @@ impl Pool
             }
         }
         self.map_hash_write.remove(chunk_hash);
+    }
+
+    pub fn is_complete(&self) -> bool
+    {
+        return self.map_hash_write.is_empty();
     }
 
     pub fn get_binary_data(&mut self, chunk_hash: &[u8; HASH_SIZE]) -> Option<Vec<u8>>
