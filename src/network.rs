@@ -143,7 +143,15 @@ impl Network
                 }
             }
             let send_req = self.pool.get_binary_chunk_request();
-            let _ = self.socket.send_to(send_req.as_slice(), &self.send_address[0]);
+            let _ = match self.socket.send_to(send_req.as_slice(), &self.send_address[0])
+            {
+                Ok(n) => n,
+                Err(why) =>
+                {
+                    println!("WARNING!!! Error while sending chunk request: {}", why);
+                    0
+                }
+            };
         }
         let mut send_started = Instant::now();
         while !self.client
