@@ -8,6 +8,7 @@ use std::io::Seek;
 use std::io::SeekFrom;
 use std::io::Write;
 use std::path::Path;
+use std::time::Instant;
 
 pub const CHUNK_SIZE: usize = 60000;
 
@@ -46,6 +47,7 @@ impl DiskFile
         {
             panic!("Cannot get filename for {}", path.to_str().unwrap_or("NULL"));
         }
+        println!("Calculating hash for {}", diskfile.file_name);
         let mut name_sha3 = CHasher::new();
         name_sha3.update(diskfile.file_name.as_bytes());
         name_sha3.finalize(&mut diskfile.name_hash);
@@ -60,8 +62,15 @@ impl DiskFile
             Ok(result) => result,
         });
         let mut file_sha3 = CHasher::new();
+        let mut byte_count: u64 = 0;
+        let mut started = Instant::now();
         loop
         {
+            if started.elapsed().as_secs() > 1
+            {
+                started = Instant::now();
+                println!("Hashed {} kibibytes", byte_count / 1024);
+            }
             let mut chunk_sha3 = CHasher::new();
             let mut buffer: [u8; CHUNK_SIZE] = [0; CHUNK_SIZE];
             let mut buffer_index: usize = 0;
@@ -73,6 +82,11 @@ impl DiskFile
                     Ok(0) => break,
                     Ok(n) => buffer_index += n,
                 };
+            }
+            byte_count += buffer_index as u64;
+            if set_size.is_some() && byte_count > set_size.unwrap()
+            {
+                buffer_index -= (byte_count - set_size.unwrap() as u64) as usize;
             }
             if buffer_index != 0
             {
