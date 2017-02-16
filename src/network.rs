@@ -1,10 +1,10 @@
 extern crate byteorder;
 
+use self::byteorder::{BigEndian, ByteOrder};
 use commons::HASH_SIZE;
 use pool::{ACTION_REQUEST_DATA, ACTION_REQUEST_DESCRIPTION, ACTION_SEND_DATA, ACTION_SEND_DESCRIPTION, MAGIC_NUMBER,
            PROTOCOL_VERSION};
 use pool::Pool;
-use self::byteorder::{BigEndian, ByteOrder};
 use std::cmp::max;
 use std::net::SocketAddr;
 use std::net::UdpSocket;
@@ -28,7 +28,7 @@ impl Network
         let mut buffer: [u8; 6] = [0; 6];
         BigEndian::write_u32(&mut buffer[0..4], MAGIC_NUMBER);
         BigEndian::write_u16(&mut buffer[4..6], PROTOCOL_VERSION);
-        return header.clone() == buffer;
+        *header == buffer
     }
 
     pub fn run(&mut self)
@@ -216,7 +216,7 @@ impl Network
         }
     }
 
-    pub fn new(files: &Vec<PathBuf>, _client: bool, _send_address: Vec<SocketAddr>, _megabit_per_second: f64) -> Network
+    pub fn new(files: &[PathBuf], _client: bool, _send_address: Vec<SocketAddr>, _megabit_per_second: f64) -> Network
     {
         println!("Welcome to Stardust");
         if _client && _send_address.len() != 1
@@ -295,13 +295,13 @@ impl Network
             };
             let mut vec_boostrap = Vec::new();
             vec_boostrap.extend_from_slice(&bootstrap_packet[7..bootstrap_packet_size]);
-            return Network {
+            Network {
                 socket: sock,
                 client: true,
                 send_address: _send_address,
                 pool: Pool::new(files, Some(vec_boostrap)),
                 megabit_per_second: _megabit_per_second,
-            };
+            }
         }
         else
         {
@@ -310,13 +310,13 @@ impl Network
                 Err(why) => panic!("Cannot enable broadcast transmission: {}", why),
                 Ok(_) => 0,
             };
-            return Network {
+            Network {
                 socket: sock,
                 client: false,
                 send_address: _send_address,
                 pool: Pool::new(files, None),
                 megabit_per_second: _megabit_per_second,
-            };
+            }
         }
     }
 }

@@ -103,38 +103,38 @@ impl DiskFile
             }
         }
         file_sha3.finalize(&mut diskfile.global_hash);
-        return diskfile;
+        diskfile
     }
 
     pub fn get_name_hash(&self) -> [u8; HASH_SIZE]
     {
         let mut v: [u8; HASH_SIZE] = [0; HASH_SIZE];
         v.clone_from_slice(&self.name_hash);
-        return v;
+        v
     }
 
     pub fn get_chunk_hash(&self, chunk_number: usize) -> [u8; HASH_SIZE]
     {
         let mut v: [u8; HASH_SIZE] = [0; HASH_SIZE];
         v.clone_from_slice(&self.chunk_hash[chunk_number]);
-        return v;
+        v
     }
 
     pub fn get_file_hash(&self) -> [u8; HASH_SIZE]
     {
         let mut v: [u8; HASH_SIZE] = [0; HASH_SIZE];
         v.clone_from_slice(&self.global_hash);
-        return v;
+        v
     }
 
     pub fn get_file_name(&self) -> String
     {
-        return self.file_name.clone();
+        self.file_name.clone()
     }
 
     pub fn get_num_chunks(&self) -> usize
     {
-        return self.chunk_hash.len();
+        self.chunk_hash.len()
     }
 
     pub fn get_chunk_size(&self, chunk_number: usize) -> usize
@@ -147,7 +147,7 @@ impl DiskFile
         {
             return CHUNK_SIZE;
         }
-        return (self.file_size % (CHUNK_SIZE as u64)) as usize;
+        (self.file_size % (CHUNK_SIZE as u64)) as usize
     }
 
     pub fn read_chunk(&mut self, chunk_number: usize) -> Vec<u8>
@@ -168,10 +168,10 @@ impl DiskFile
             Err(why) => panic!("Read error on {}: {}", self.file_path, why),
             _ => 0,
         };
-        return v;
+        v
     }
 
-    pub fn write_chunk(&mut self, chunk_number: usize, data: &Vec<u8>)
+    pub fn write_chunk(&mut self, chunk_number: usize, data: &[u8])
     {
         if self.read_only
         {
@@ -187,7 +187,7 @@ impl DiskFile
             Err(why) => panic!("Seek error on {}: {}", self.file_path, why),
             Ok(n) => n,
         };
-        let _ = match self.file.write_all(data.as_slice())
+        let _ = match self.file.write_all(data)
         {
             Err(why) => panic!("Write error on {}: {}", self.file_path, why),
             _ => 0,

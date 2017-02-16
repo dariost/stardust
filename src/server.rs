@@ -38,27 +38,33 @@ fn main()
     {
         broadcast_address.clear();
         let mut bat: Vec<toml::Value> = Vec::new();
-        bat.extend_from_slice(table.get("broadcast_address").unwrap().as_slice().unwrap());
+        bat.extend_from_slice(table["broadcast_address"].as_slice().unwrap());
         for i in &bat
         {
             broadcast_address.push(String::from(i.as_str().unwrap()));
         }
     }
-    let mut file_folder = String::from("./");
-    if table.contains_key("file_folder")
+    let file_folder = if table.contains_key("file_folder")
     {
-        file_folder = String::from(table.get("file_folder").unwrap().clone().as_str().unwrap());
+        String::from(table["file_folder"].clone().as_str().unwrap())
     }
-    let mut megabit_per_second: f64 = 90.0;
-    if table.contains_key("megabit_per_second")
+    else
     {
-        megabit_per_second = table.get("megabit_per_second").unwrap().clone().as_float().unwrap();
+        String::from("./")
+    };
+    let megabit_per_second: f64 = if table.contains_key("megabit_per_second")
+    {
+        table["megabit_per_second"].clone().as_float().unwrap()
     }
+    else
+    {
+        90.0
+    };
     let mut to_send: Vec<SocketAddr> = Vec::new();
     for i in &broadcast_address
     {
         let mut ip: Vec<u8> = Vec::new();
-        for s in i.split(".")
+        for s in i.split('.')
         {
             ip.push(match s.parse::<u8>()
                 {

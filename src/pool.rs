@@ -1,11 +1,11 @@
 extern crate byteorder;
 extern crate lz4_compress as lz4;
 
+use self::byteorder::{BigEndian, ByteOrder};
 use commons::CHasher;
 use commons::HASH_SIZE;
 use disk_file::CHUNK_SIZE;
 use disk_file::DiskFile;
-use self::byteorder::{BigEndian, ByteOrder};
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::collections::VecDeque;
@@ -68,11 +68,11 @@ impl Pool
         {
             self.save_old_chunks_time.remove(&chunk_hash);
         }
-        self.save_old_chunks_time.insert(chunk_hash.clone(), now);
-        return self.get_binary_data(&chunk_hash);
+        self.save_old_chunks_time.insert(chunk_hash, now);
+        self.get_binary_data(&chunk_hash)
     }
 
-    pub fn new(files: &Vec<PathBuf>, first_packet: Option<Vec<u8>>) -> Pool
+    pub fn new(files: &[PathBuf], first_packet: Option<Vec<u8>>) -> Pool
     {
         let have_sizes: bool = first_packet.is_some();
         let mut p = Pool {
@@ -83,7 +83,7 @@ impl Pool
             map_hash_write: HashMap::new(),
             map_hash_read: HashMap::new(),
             cache_set_sizes: Vec::new(),
-            cache_file_path: files.clone(),
+            cache_file_path: files.to_vec(),
             save_old_chunks_time: HashMap::new(),
             server_send_queue: VecDeque::new(),
             server_in_queue: HashSet::new(),
@@ -134,12 +134,12 @@ impl Pool
                 }
             }
         }
-        return p;
+        p
     }
 
     pub fn desc_left(&self) -> usize
     {
-        return self.update_left.len();
+        self.update_left.len()
     }
 
     pub fn get_binary_chunk_request(&self) -> Vec<u8>
@@ -162,10 +162,10 @@ impl Pool
             }
             v.extend_from_slice(i);
         }
-        return v;
+        v
     }
 
-    pub fn process_binary_chunk_request(&mut self, data: &Vec<u8>)
+    pub fn process_binary_chunk_request(&mut self, data: &[u8])
     {
         if data.len() % HASH_SIZE != 0
         {
@@ -181,7 +181,7 @@ impl Pool
                 let mut save_chunk = true;
                 if self.save_old_chunks_time.contains_key(chunk)
                 {
-                    let inserted_time = self.save_old_chunks_time.get(chunk).unwrap().clone();
+                    let inserted_time = self.save_old_chunks_time[chunk];
                     let elapsed_time = now.duration_since(inserted_time);
                     if elapsed_time < Duration::from_millis(2500)
                     {
@@ -208,7 +208,7 @@ impl Pool
         {
             v.push(FileDescription::new(&self.data[i], i as u8));
         }
-        return v;
+        v
     }
 
     pub fn generate_binary_description(&self) -> Vec<Vec<u8>>
@@ -262,10 +262,10 @@ impl Pool
             }
             bin_data.push(v);
         }
-        return bin_data;
+        bin_data
     }
 
-    fn unwrap_description(&self, data: &Vec<u8>, i: usize) -> (u8, [u8; HASH_SIZE], [u8; HASH_SIZE], u32, u16)
+    fn unwrap_description(&self, data: &[u8], i: usize) -> (u8, [u8; HASH_SIZE], [u8; HASH_SIZE], u32, u16)
     {
         let struct_size: usize = 7 + 2 * HASH_SIZE;
         let file_id: u8 = data[i * struct_size + 1];
@@ -273,25 +273,25 @@ impl Pool
         name_hash.copy_from_slice(&data[(i * struct_size + 2)..(i * struct_size + 2 + HASH_SIZE)]);
         let mut file_hash: [u8; HASH_SIZE] = [0; HASH_SIZE];
         file_hash.copy_from_slice(&data[(i * struct_size + 2 + HASH_SIZE)..(i * struct_size + 2 + 2 * HASH_SIZE)]);
-        let num_chunks: u32 = BigEndian::read_u32(&data[(i * struct_size + 2 + 2 * HASH_SIZE)..(i * struct_size + 6 +
-                                                                                                2 * HASH_SIZE)]);
-        let last_chunk_size: u16 = BigEndian::read_u16(&data[(i * struct_size + 6 + 2 * HASH_SIZE)..(i * struct_size + 8 +
-                                                                                                     2 * HASH_SIZE)]);
-        return (file_id, name_hash, file_hash, num_chunks, last_chunk_size);
+        let num_chunks: u32 = BigEndian::read_u32(&data[(i * struct_size + 2 + 2 * HASH_SIZE)..
+                                                   (i * struct_size + 6 + 2 * HASH_SIZE)]);
+        let last_chunk_size: u16 = BigEndian::read_u16(&data[(i * struct_size + 6 + 2 * HASH_SIZE)..
+                                                        (i * struct_size + 8 + 2 * HASH_SIZE)]);
+        (file_id, name_hash, file_hash, num_chunks, last_chunk_size)
     }
 
     pub fn get_queue_size(&self) -> usize
     {
-        return self.server_send_queue.len();
+        self.server_send_queue.len()
     }
 
-    pub fn process_binary_description(&mut self, data: &Vec<u8>) -> bool
+    pub fn process_binary_description(&mut self, data: &[u8]) -> bool
     {
         if self.read_only
         {
             panic!("Writing on read-only table!");
         }
-        if self.cache_set_sizes.len() == 0
+        if self.cache_set_sizes.is_empty()
         {
             self.cache_set_sizes = vec![0; self.cache_file_path.len()];
             let num_files: usize = data[0] as usize;
@@ -327,7 +327,7 @@ impl Pool
             }
             return false;
         }
-        if self.file_index_map.len() == 0
+        if self.file_index_map.is_empty()
         {
             let num_files: usize = data[0] as usize;
             for i in 0..num_files
@@ -364,7 +364,7 @@ impl Pool
             let chunk_id: u32 = BigEndian::read_u32(&local_slice[(HASH_SIZE + 1)..(HASH_SIZE + 5)]);
             if self.update_left.contains(&(fid, chunk_id))
             {
-                let mapped_fid: usize = self.file_index_map.get(&fid).unwrap().clone();
+                let mapped_fid: usize = self.file_index_map[&fid];
                 if self.data[mapped_fid].get_chunk_hash(chunk_id as usize) != chunk_hash
                 {
                     if !self.map_hash_write.contains_key(&chunk_hash)
@@ -378,10 +378,10 @@ impl Pool
                 self.update_left.remove(&(fid, chunk_id));
             }
         }
-        return self.update_left.is_empty();
+        self.update_left.is_empty()
     }
 
-    pub fn process_binary_data(&mut self, chunk: &Vec<u8>)
+    pub fn process_binary_data(&mut self, chunk: &[u8])
     {
         let mut chunk_hash: [u8; HASH_SIZE] = [0; HASH_SIZE];
         chunk_hash.clone_from_slice(&chunk[0..HASH_SIZE]);
@@ -399,7 +399,7 @@ impl Pool
         self.process_chunk(&chunk_hash, &uncompressed_chunk);
     }
 
-    pub fn process_chunk(&mut self, chunk_hash: &[u8; HASH_SIZE], chunk: &Vec<u8>)
+    pub fn process_chunk(&mut self, chunk_hash: &[u8; HASH_SIZE], chunk: &[u8])
     {
         if self.read_only
         {
@@ -427,12 +427,12 @@ impl Pool
 
     pub fn is_complete(&self) -> bool
     {
-        return self.map_hash_write.is_empty();
+        self.map_hash_write.is_empty()
     }
 
     pub fn chunks_left(&self) -> usize
     {
-        return self.map_hash_write.len();
+        self.map_hash_write.len()
     }
 
     pub fn get_binary_data(&mut self, chunk_hash: &[u8; HASH_SIZE]) -> Option<Vec<u8>>
@@ -461,7 +461,7 @@ impl Pool
         {
             panic!("Compression is doing some damage!");
         }
-        return Some(v);
+        Some(v)
     }
 
     pub fn get_chunk(&mut self, chunk_hash: &[u8; HASH_SIZE]) -> Option<Vec<u8>>
@@ -470,8 +470,8 @@ impl Pool
         {
             return None;
         }
-        let &(i, j) = self.map_hash_read.get(chunk_hash).unwrap();
-        return Some(self.data[i as usize].read_chunk(j as usize));
+        let (i, j) = self.map_hash_read[chunk_hash];
+        Some(self.data[i as usize].read_chunk(j as usize))
     }
 }
 
@@ -491,6 +491,6 @@ impl FileDescription
         {
             fd.chunk.push(diskfile.get_chunk_hash(i));
         }
-        return fd;
+        fd
     }
 }

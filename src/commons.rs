@@ -47,5 +47,5 @@ pub fn base16(data: &[u8]) -> String
         }
         write!(&mut s, "{:x}", b).unwrap();
     }
-    return s;
+    s
 }
