@@ -113,10 +113,10 @@ impl DiskFile
         file_sha3.finalize(&mut diskfile.global_hash);
         if ro
         {
-            let mut file_hash = match OpenOptions::new().write(true).create(true).open(hash_folder.to_owned() + "/" + diskfile.file_name.as_str() +
-                                                                   ".xxh64")
+            let hash_path = hash_folder.to_owned() + "/" + diskfile.file_name.as_str() + ".xxh64";
+            let mut file_hash = match OpenOptions::new().write(true).create(true).open(&hash_path)
             {
-                Err(why) => panic!("Cannot open {}: {}", path.to_str().unwrap_or("NULL"), why),
+                Err(why) => panic!("Cannot open {}: {}", &hash_path, why),
                 Ok(result) => result,
             };
             let _ = file_hash.write_all(base16(&diskfile.global_hash).as_bytes());
