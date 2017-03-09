@@ -1,5 +1,6 @@
 use commons::CHasher;
 use commons::HASH_SIZE;
+use commons::base16;
 use std::fs::File;
 use std::fs::OpenOptions;
 use std::io::BufReader;
@@ -26,11 +27,15 @@ pub struct DiskFile
 
 impl DiskFile
 {
-    pub fn new(path: &Path, set_size: Option<u64>) -> DiskFile
+    pub fn new(path: &Path, set_size: Option<u64>, hash_folder: &str) -> DiskFile
     {
         let ro = set_size.is_none();
         let mut diskfile = DiskFile {
-            file: match OpenOptions::new().write(!ro).read(true).create(!ro).open(path)
+            file: match OpenOptions::new()
+                      .write(!ro)
+                      .read(true)
+                      .create(!ro)
+                      .open(path)
             {
                 Err(why) => panic!("Cannot open {}: {}", path.to_str().unwrap_or("NULL"), why),
                 Ok(result) => result,
@@ -41,7 +46,10 @@ impl DiskFile
             chunk_hash: Vec::new(),
             file_path: path.to_str().unwrap_or("NULL").to_string(),
             file_size: 0,
-            file_name: String::from(path.file_name().unwrap().to_str().unwrap_or("")),
+            file_name: String::from(path.file_name()
+                                        .unwrap()
+                                        .to_str()
+                                        .unwrap_or("")),
         };
         if diskfile.file_name == ""
         {
@@ -58,9 +66,9 @@ impl DiskFile
         let _ = diskfile.file.sync_all();
         let mut buff_file = BufReader::new(match OpenOptions::new().read(true).open(path)
         {
-            Err(why) => panic!("Cannot open {}: {}", path.to_str().unwrap_or("NULL"), why),
-            Ok(result) => result,
-        });
+                                               Err(why) => panic!("Cannot open {}: {}", path.to_str().unwrap_or("NULL"), why),
+                                               Ok(result) => result,
+                                           });
         let mut file_sha3 = CHasher::new();
         let mut byte_count: u64 = 0;
         let mut started = Instant::now();
@@ -103,6 +111,16 @@ impl DiskFile
             }
         }
         file_sha3.finalize(&mut diskfile.global_hash);
+        if ro
+        {
+            let mut file_hash = match OpenOptions::new().write(true).create(true).open(hash_folder.to_owned() + "/" + diskfile.file_name.as_str() +
+                                                                   ".xxh64")
+            {
+                Err(why) => panic!("Cannot open {}: {}", path.to_str().unwrap_or("NULL"), why),
+                Ok(result) => result,
+            };
+            let _ = file_hash.write_all(base16(&diskfile.global_hash).as_bytes());
+        }
         diskfile
     }
 

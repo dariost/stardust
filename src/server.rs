@@ -50,7 +50,15 @@ fn main()
     }
     else
     {
-        String::from("./")
+        String::from("./startdust_files")
+    };
+    let hash_folder = if table.contains_key("hash_folder")
+    {
+        String::from(table["hash_folder"].clone().as_str().unwrap())
+    }
+    else
+    {
+        String::from("./startdast_hashes")
     };
     let megabit_per_second: f64 = if table.contains_key("megabit_per_second")
     {
@@ -67,10 +75,10 @@ fn main()
         for s in i.split('.')
         {
             ip.push(match s.parse::<u8>()
-                {
-                    Err(why) => panic!("Invalid IP address: {}", why),
-                    Ok(n) => n,
-                });
+            {
+                        Err(why) => panic!("Invalid IP address: {}", why),
+                        Ok(n) => n,
+                    });
         }
         to_send.push(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(ip[0], ip[1], ip[2], ip[3])), 31415));
     }
@@ -80,6 +88,6 @@ fn main()
     {
         files_path.push(path.unwrap().path());
     }
-    let mut net = Network::new(&files_path, false, to_send, megabit_per_second);
+    let mut net = Network::new(&files_path, false, to_send, megabit_per_second, hash_folder.as_str());
     net.run();
 }

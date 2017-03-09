@@ -35,7 +35,6 @@ impl CHasher
     }
 }
 
-#[allow(dead_code)]
 pub fn base16(data: &[u8]) -> String
 {
     let mut s = String::new();

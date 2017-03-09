@@ -25,10 +25,10 @@ fn main()
     for s in &ip_str
     {
         ip.push(match s.parse::<u8>()
-            {
-                Err(why) => panic!("Invalid IP address: {}", why),
-                Ok(n) => n,
-            });
+        {
+                    Err(why) => panic!("Invalid IP address: {}", why),
+                    Ok(n) => n,
+                });
     }
     let to_send = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(ip[0], ip[1], ip[2], ip[3])), 31416);
     let mut files_path: Vec<PathBuf> = Vec::new();
@@ -36,6 +36,6 @@ fn main()
     {
         files_path.push(PathBuf::from(&i));
     }
-    let mut net = Network::new(&files_path, true, vec![to_send; 1], 0.0);
+    let mut net = Network::new(&files_path, true, vec![to_send; 1], 0.0, "");
     net.run();
 }

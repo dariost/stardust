@@ -216,7 +216,8 @@ impl Network
         }
     }
 
-    pub fn new(files: &[PathBuf], _client: bool, _send_address: Vec<SocketAddr>, _megabit_per_second: f64) -> Network
+    pub fn new(files: &[PathBuf], _client: bool, _send_address: Vec<SocketAddr>, _megabit_per_second: f64, hfolder: &str)
+               -> Network
     {
         println!("Welcome to Stardust");
         if _client && _send_address.len() != 1
@@ -225,12 +226,12 @@ impl Network
         }
         let sock = match if _client
         {
-            UdpSocket::bind("0.0.0.0:31415")
-        }
+                  UdpSocket::bind("0.0.0.0:31415")
+              }
         else
         {
-            UdpSocket::bind("0.0.0.0:31416")
-        }
+                  UdpSocket::bind("0.0.0.0:31416")
+              }
         {
             Err(why) => panic!("Cannot create socket: {}", why),
             Ok(s) => s,
@@ -299,7 +300,7 @@ impl Network
                 socket: sock,
                 client: true,
                 send_address: _send_address,
-                pool: Pool::new(files, Some(vec_boostrap)),
+                pool: Pool::new(files, Some(vec_boostrap), hfolder),
                 megabit_per_second: _megabit_per_second,
             }
         }
@@ -314,7 +315,7 @@ impl Network
                 socket: sock,
                 client: false,
                 send_address: _send_address,
-                pool: Pool::new(files, None),
+                pool: Pool::new(files, None, hfolder),
                 megabit_per_second: _megabit_per_second,
             }
         }

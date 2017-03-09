@@ -2,3 +2,4 @@ target
 Cargo.lock
 stardustd.toml
 test
+hash

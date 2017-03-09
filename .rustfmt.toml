@@ -5,7 +5,6 @@ fn_call_width = 132
 newline_style = "Unix"
 fn_brace_style = "AlwaysNextLine"
 item_brace_style = "AlwaysNextLine"
-else_if_brace_style = "AlwaysNextLine"
 control_brace_style = "AlwaysNextLine"
 impl_empty_single_line = true
 fn_empty_single_line = true

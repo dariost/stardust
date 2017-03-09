@@ -72,7 +72,7 @@ impl Pool
         self.get_binary_data(&chunk_hash)
     }
 
-    pub fn new(files: &[PathBuf], first_packet: Option<Vec<u8>>) -> Pool
+    pub fn new(files: &[PathBuf], first_packet: Option<Vec<u8>>, hash_folder: &str) -> Pool
     {
         let have_sizes: bool = first_packet.is_some();
         let mut p = Pool {
@@ -112,7 +112,7 @@ impl Pool
                 {
                     None
                 };
-                p.data.push(DiskFile::new(&files[i], tmp_size));
+                p.data.push(DiskFile::new(&files[i], tmp_size, hash_folder));
             }
         }
         for i in 0..p.data.len()
@@ -303,7 +303,11 @@ impl Pool
                 for j in 0..self.cache_file_path.len()
                 {
                     let mut name_sha3 = CHasher::new();
-                    let req_file_name = String::from(self.cache_file_path[j].file_name().unwrap().to_str().unwrap_or(""));
+                    let req_file_name = String::from(self.cache_file_path[j]
+                                                         .file_name()
+                                                         .unwrap()
+                                                         .to_str()
+                                                         .unwrap_or(""));
                     if req_file_name == ""
                     {
                         panic!("Error while decoding filename");
@@ -373,7 +377,10 @@ impl Pool
                         chunk_hash2.clone_from_slice(&chunk_hash);
                         self.map_hash_write.insert(chunk_hash2, Vec::new());
                     }
-                    self.map_hash_write.get_mut(&chunk_hash).unwrap().push((fid, chunk_id));
+                    self.map_hash_write
+                        .get_mut(&chunk_hash)
+                        .unwrap()
+                        .push((fid, chunk_id));
                 }
                 self.update_left.remove(&(fid, chunk_id));
             }
@@ -418,7 +425,10 @@ impl Pool
                 {
                     continue;
                 }
-                let mapped_fid = self.file_index_map.get(&unmapped_fid).unwrap().clone();
+                let mapped_fid = self.file_index_map
+                    .get(&unmapped_fid)
+                    .unwrap()
+                    .clone();
                 self.data[mapped_fid].write_chunk(chunk_id as usize, chunk);
             }
         }
