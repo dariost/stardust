@@ -50,7 +50,7 @@ fn main()
     }
     else
     {
-        String::from("./startdust_files")
+        String::from("./stardust_files")
     };
     let hash_folder = if table.contains_key("hash_folder")
     {
@@ -58,7 +58,7 @@ fn main()
     }
     else
     {
-        String::from("./startdast_hashes")
+        String::from("./stardust_hashes")
     };
     let megabit_per_second: f64 = if table.contains_key("megabit_per_second")
     {
